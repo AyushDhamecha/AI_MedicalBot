@@ -12,6 +12,8 @@ pypdf = "*"
 transformers = "*"
 torch = "*"
 sentence-transformers = "*"
+streamlit = "*"
+googletrans = "*"
 
 [dev-packages]
 
