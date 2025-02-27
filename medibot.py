@@ -7,42 +7,64 @@ from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEndpoint
+from translate import Translator
 
 ## Uncomment the following files if you're not using pipenv as your virtual environment manager
 #from dotenv import load_dotenv, find_dotenv
 #load_dotenv(find_dotenv())
 
+DB_FAISS_PATH = "vectorstore/db_faiss"
 
-DB_FAISS_PATH="vectorstore/db_faiss"
 @st.cache_resource
 def get_vectorstore():
-    embedding_model=HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
-    db=FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True)
+    embedding_model = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
+    db = FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True)
     return db
 
-
 def set_custom_prompt(custom_prompt_template):
-    prompt=PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
+    prompt = PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
     return prompt
 
-
 def load_llm(huggingface_repo_id, HF_TOKEN):
-    llm=HuggingFaceEndpoint(
+    llm = HuggingFaceEndpoint(
         repo_id=huggingface_repo_id,
         temperature=0.5,
-        model_kwargs={"token":HF_TOKEN,
-                      "max_length":"512"}
+        model_kwargs={"token": HF_TOKEN, "max_length": "512"}
     )
     return llm
 
 def main():
     st.title("Ask Chatbot!")
 
+    # Add a language selection dropdown
+    language_options = {
+        "English": "en",
+        "Hindi": "hi",
+        "Telugu": "te",
+        "Tamil": "ta",
+        "Sindhi": "sd",
+        # Add more languages as needed
+    }
+    selected_language = st.selectbox("Select Language for Answer", list(language_options.keys()))
+
+    # Initialize session state for messages and sources
     if 'messages' not in st.session_state:
         st.session_state.messages = []
+    if 'sources' not in st.session_state:
+        st.session_state.sources = []
 
+    # Display previous messages
     for message in st.session_state.messages:
         st.chat_message(message['role']).markdown(message['content'])
+
+    # Display previous sources
+    if st.session_state.sources:
+        st.subheader("Sources:")
+        for source in st.session_state.sources:
+            st.markdown(f"**Source:** {source.get('source', 'Unknown')}")
+            st.markdown(f"**Page:** {source.get('page', 'Unknown')}")
+            st.markdown(f"**Content:** {source.get('content', 'Unknown')}")
+            st.markdown("---")
 
     prompt = st.chat_input("Pass your prompt here")
 
@@ -82,17 +104,29 @@ def main():
             result = response["result"]
             source_documents = response["source_documents"]
 
-            # Display the result
-            st.chat_message('assistant').markdown(result)
-            st.session_state.messages.append({'role': 'assistant', 'content': result})
+            # Translate the result to the selected language
+            translator = Translator(to_lang=language_options[selected_language])
+            translated_result = translator.translate(result)
+
+            # Display the translated result
+            st.chat_message('assistant').markdown(translated_result)
+            st.session_state.messages.append({'role': 'assistant', 'content': translated_result})
+
+            # Store the source documents in session state
+            for doc in source_documents:
+                st.session_state.sources.append({
+                    'source': doc.metadata.get('source', 'Unknown'),
+                    'page': doc.metadata.get('page', 'Unknown'),
+                    'content': doc.page_content
+                })
 
             # Display the source documents in a more readable format
-            if source_documents:
+            if st.session_state.sources:
                 st.subheader("Sources:")
-                for doc in source_documents:
-                    st.markdown(f"**Source:** {doc.metadata.get('source', 'Unknown')}")
-                    st.markdown(f"**Page:** {doc.metadata.get('page', 'Unknown')}")
-                    st.markdown(f"**Content:** {doc.page_content}")
+                for source in st.session_state.sources:
+                    st.markdown(f"**Source:** {source.get('source', 'Unknown')}")
+                    st.markdown(f"**Page:** {source.get('page', 'Unknown')}")
+                    st.markdown(f"**Content:** {source.get('content', 'Unknown')}")
                     st.markdown("---")
 
         except Exception as e:

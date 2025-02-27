@@ -14,6 +14,7 @@ torch = "*"
 sentence-transformers = "*"
 streamlit = "*"
 googletrans = "*"
+translate = "*"
 
 [dev-packages]
 
